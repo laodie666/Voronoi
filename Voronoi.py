@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 
-points  = [(0,0), (2,0), (2,2)]
+points  = [(0,0), (2,0), (2,2), (-2, 0), (-2,2), (-0.5, -2)]
 # Half plane can't be infinite in size so resort to very big
 bigshape_constant = max(max([p[0] for p in points]), max([p[1] for p in points]), 10) * 100
 
@@ -71,88 +71,74 @@ class line:
         right_point = (self.midpoint()[0] + bigshape_constant, self.midpoint()[1] + bigshape_constant * perp)
         return line(left_point, right_point)
 
-    # Return intersect point with another line, return None if DNE.
     def intersect(self, other: "line"):
-        # don't intersect
-        if self.slope() == other.slope() and self.a() == other.a():
-            return None
-        # same line
-        if self.slope() == other.slope() and self.a() != other.a():
+        if self.slope() == other.slope():
             return None
 
-        # Degenerate case, really should use homogeneous coordinates
         if other.slope() == float("inf"):
             x = other.p1[0]
-            y = self.a() + self.slope() * x
+            y = self.a() + self.slope()*x
         elif self.slope() == float("inf"):
             x = self.p1[0]
-            y = other.a() + other.slope() * x
+            y = other.a() + other.slope()*x
         else:  
             x = (other.a() - self.a())/(self.slope() - other.slope()) 
-            y = self.a() + self.slope() * x
-
-        if min(self.p1[0], self.p2[0]) <= x <= max(self.p1[0], self.p2[0]) and \
-            min(other.p1[0], other.p2[0]) <= x <= max(other.p1[0], other.p2[0]):
-            return (x,y)    
-        else:
-            return None
+            y = self.a() + self.slope()*x
+        return (x,y)
     
 
 
 class polygon:
-    def __init__(self):
-        self.lines = []
-
+    def __init__(self, vertices):
+        self.vertices = vertices
 
 def draw_voronoi_for_p(point):
-# Say line a is being clipped by line b, representing point at 1 -1
-    output = polygon()
-    i = 0
+    c = bigshape_constant
+    poly = polygon([(c,c), (-c,c), (-c,-c), (c,-c)])
+
     for other in points:
-        
         if other == point:
             continue
+        
 
-        if len(output.lines) == 0:
-            l = line(point, other)
-            output.lines.append(l.bisector())
+        bisector = line(point, other).bisector()
+        
+        new_vertices = []
+        if len(poly.vertices) == 0:
             continue
 
-        result = polygon()
-        for la in output.lines:
+        p_prev = poly.vertices[-1]
+        
+        # Determine which side of bisector the site point is on
+        prev_in = (left_of_line(bisector, p_prev) == left_of_line(bisector, point))
+
+        # Sutherland-Hodgman clipping
+        for p_curr in poly.vertices:
+            curr_in = (left_of_line(bisector, p_curr) == left_of_line(bisector, point))
             
-            lb = line(point, other)
-            lb = lb.bisector()
+            if curr_in:
+                if not prev_in:
+                    intersection = bisector.intersect(line(p_prev, p_curr))
+                    if intersection:
+                        new_vertices.append(intersection)
+                new_vertices.append(p_curr)
+            elif prev_in:
+                intersection = bisector.intersect(line(p_prev, p_curr))
+                if intersection:
+                    new_vertices.append(intersection)
+            
+            p_prev = p_curr
+            prev_in = curr_in
+            
+        poly.vertices = new_vertices
 
-            start = la.p1
-            intersect = la.intersect(lb)
-            if intersect != None:
-                # Check whether the source of the line is the same side as the point against the bisector
-                # They are of opposite sides, meaning the line is entering
-                if left_of_line(lb, la.p1) != left_of_line(lb, point):
-                    result.lines.append(line(intersect, la.p2))
-                # Line is exiting
-                else:
-                    result.lines.append(line(start, intersect))
-                    # Determine which end of lb to add
-                    if left_of_line(la, point) == left_of_line(lb, point):
-                        result.lines.append(line(intersect, lb.p2))     
-                    else:
-                        result.lines.append(line(intersect, lb.p1))
+    for i in range(len(poly.vertices)):
+        p1 = poly.vertices[i]
+        p2 = poly.vertices[(i+1)%len(poly.vertices)]
+        
+        draw_line(line(p1, p2))
 
-            # If no intersection
-            else:
-                # If inside just add the line segment
-                if dot_product(subtract_points(la.p1, lb.p1), subtract_points(point, lb.p1)) > 0:
-                    result.lines.append(la)
-                # If outside discard
-
-        output = result
-    
-    for l in output.lines:
-        draw_line(l)
                         
-
 for point in points:
     draw_voronoi_for_p(point)
 
